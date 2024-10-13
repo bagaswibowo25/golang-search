@@ -57,8 +57,6 @@ func searchIndexedLogs(query string) []types.LogEntry {
 				logEntry.Timestamp = string(field.Value())
 			case "message":
 				logEntry.Message = string(field.Value())
-			case "date":
-				logEntry.Date = string(field.Value())
 			}
 		}
 

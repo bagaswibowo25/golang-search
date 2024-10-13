@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/bagaswibowo25/golang-search/pkg/types"
 	"github.com/julienschmidt/httprouter"
@@ -17,6 +18,9 @@ func IngestHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) 
 	}
 
 	for _, logEntry := range req.Logs {
+		location, _ := time.LoadLocation("Asia/Jakarta")
+		now := time.Now().In(location)
+		logEntry.Timestamp = now.Format(time.RFC3339) + "Z"
 		ingestionChannel <- logEntry
 	}
 
