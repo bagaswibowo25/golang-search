@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -10,15 +11,35 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-func IngestHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (ids *Indices) IngestDocHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var err error
 	var req types.IngestRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	var idxPath bleve.Index
+
+	if len(ids.Index) == 0 {
+		log.Printf("There is no indices exists")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	for _, idx := range ids.Index {
+		if idx.Name == ps.ByName("idx") && idx.Active {
+			idxPath = idx.Path
+			log.Printf("Index is found")
+			break
+		}
+
+		log.Printf("No matching index")
+	}
+
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
 	for _, logEntry := range req.Logs {
+		logEntry.Index = idxPath
 		location, _ := time.LoadLocation("Asia/Jakarta")
 		now := time.Now().In(location)
 		logEntry.Timestamp = now.Format(time.RFC3339) + "Z"
@@ -29,72 +50,101 @@ func IngestHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) 
 	w.Write([]byte(`{"status":"accepted"}`))
 }
 
-func IngestDocHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	var req types.IngestRequest
-	var docEntry types.DocIngest
+func (ids *Indices) SearchDocHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var idxPath bleve.Index
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	indexPath := ps.ByName("idx")
-
-	for _, docEntry.Logs = range req.Logs {
-		location, _ := time.LoadLocation("Asia/Jakarta")
-		now := time.Now().In(location)
-		docEntry.Logs.Timestamp = now.Format(time.RFC3339) + "Z"
-		docEntry.Idx = indexPath
-
-		ingestDocChannel <- docEntry
-	}
-
-	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte(`{"status":"accepted"}`))
-}
-
-func SearchHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	query := r.URL.Query().Get("query")
 	if query == "" {
 		http.Error(w, "Query parameter is required", http.StatusBadRequest)
 		return
 	}
 
-	hits := searchIndexedLogs(query)
+	if len(ids.Index) == 0 {
+		http.Error(w, "There is no indices exists", http.StatusNotFound)
+		return
+	}
+
+	for _, idx := range ids.Index {
+		if idx.Name == ps.ByName("idx") && idx.Active {
+			idxPath = idx.Path
+		}
+	}
+
+	hits := searchIndexedLogs(idxPath, query)
+
+	if hits == nil {
+		http.Error(w, "Can't find the document", http.StatusNotFound)
+	}
 
 	json.NewEncoder(w).Encode(types.SearchResponse{Hits: hits})
 }
 
-func SearchDocHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	query := r.URL.Query().Get("query")
+func (ids *Indices) CreateIndexHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var idx types.Index
+	var err error
+
+	idx.Path, err = bleve.New(ps.ByName("idx"), bleve.NewIndexMapping())
+	if err != nil {
+		http.Error(w, "Unable to create new index", http.StatusBadRequest)
+		return
+	}
+	idx.Name = ps.ByName("idx")
+	idx.Active = true
+	ids.Index = append(ids.Index, idx)
+
+	w.WriteHeader(http.StatusAccepted)
+	response := map[string]string{
+		"Status": "Created",
+	}
+	json.NewEncoder(w).Encode(response)
+
+}
+
+func (ids *Indices) CheckIndexHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	if len(ids.Index) == 0 {
+		log.Printf("There is no indices exists")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	for _, idx := range ids.Index {
+		if idx.Name == ps.ByName("idx") && idx.Active {
+			response := map[string]string{
+				"Status": "Index is open",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+}
+
+func (ids *Indices) UpdateIndexStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var index types.Index
+	var err error
+	query := r.URL.Query().Get("index")
 	if query == "" {
 		http.Error(w, "Query parameter is required", http.StatusBadRequest)
 		return
 	}
 
 	idxPath := ps.ByName("idx")
-	hits := searchDoc(idxPath, query)
 
-	json.NewEncoder(w).Encode(types.SearchResponse{Hits: hits})
-}
-
-func CreateIndexHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	var idx types.IndexTemplate
-	var err error
-
-	idx.Index, err = bleve.New(ps.ByName("idx"), bleve.NewIndexMapping())
-	if err != nil {
-		http.Error(w, "Unable to create new index", http.StatusBadRequest)
+	if query == "open" {
+		index.Path, err = bleve.Open(idxPath)
+		if err != nil {
+			log.Printf("Can't open the index")
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		index.Active = true
+		index.Name = idxPath
 	}
-	idx.Index.Close()
 
-	var responseSuccess = make(map[string]string)
+	if query == "close" {
+		index.Path.Close()
+		index.Active = false
+		index.Name = idxPath
+	}
 
-	responseSuccess["status"] = "created"
-	responseSuccess["indexName"] = idx.Index.Name()
-
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(responseSuccess)
-
+	ids.Index = append(ids.Index, index)
+	w.WriteHeader(http.StatusOK)
 }
