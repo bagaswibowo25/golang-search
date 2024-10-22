@@ -1,16 +1,10 @@
 #!/bin/bash
 
-# Create Index
-curl -X POST http://localhost:8080/api/v1/index/myidx
+# Create Indices
+curl -X POST http://localhost:8080/api/v1/indices/logging
 
-# Open Index
-curl -X PUT http://localhost:8080/api/v1/index/myidx?index=open
+# Ingest docs
+curl -X POST http://localhost:8080/api/v1/docs -d '{"logs":[{"id":"1","message":"Hello there!"}]}' -H "Content-Type: application/json"
 
-# Ingest doc to index
-curl -X POST http://localhost:8080/api/v1/log/myidx -d '{"logs":[{"id":"1","message":"My Log to myidx"}]}' -H "Content-Type: application/json"
-
-# Check Index status
-curl -X GET http://localhost:8080/api/v1/index/myidx 
-
-# Query docs from index
-curl -X GET "http://localhost:8080/api/v1/log/myidx?query=My"
+# Ingest docss
+curl -X GET "http://localhost:8080/api/v1/docs?query=myidx"

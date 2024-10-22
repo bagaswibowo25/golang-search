@@ -148,3 +148,63 @@ func (ids *Indices) UpdateIndexStatus(w http.ResponseWriter, r *http.Request, ps
 	ids.Index = append(ids.Index, index)
 	w.WriteHeader(http.StatusOK)
 }
+
+func CreateIndexesHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var indexes IndexesMetadata
+	indexesName := ps.ByName("ids")
+	if indexesName == "" {
+		log.Fatal("")
+		http.Error(w, "Invalid URL param!", http.StatusBadRequest)
+	}
+
+	indexes.createNewIndexes(indexesName)
+	response := map[string]string{
+		"Status": "Created Successfully",
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (logging *IndexesMetadata) IngestDocsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var req types.IngestRequest
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	for _, logEntry := range req.Logs {
+		logEntry.Index = logging.Alias
+		location, _ := time.LoadLocation("Asia/Jakarta")
+		now := time.Now().In(location)
+		logEntry.Timestamp = now.Format(time.RFC3339) + "Z"
+		ingestionChannel <- logEntry
+	}
+
+	response := map[string]string{
+		"Status": "Indexed Successfully",
+	}
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (logging *IndexesMetadata) SearchDocsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		http.Error(w, "Query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	hits := searchIndexedLogs(logging.Alias, query)
+
+	if hits == nil {
+		http.Error(w, "Can't find the document", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(types.SearchResponse{Hits: hits})
+
+}

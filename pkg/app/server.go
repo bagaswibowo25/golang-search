@@ -6,7 +6,6 @@ import (
 
 	"github.com/bagaswibowo25/golang-search/pkg/types"
 
-	"github.com/blevesearch/bleve"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -18,16 +17,11 @@ type Indices struct {
 	Index []types.Index
 }
 
-func OpenIndex(idxPath string) bleve.Index {
-	index, err := bleve.Open(idxPath)
-	if err != nil {
-		log.Printf("Can't open the index")
-	}
-	return index
-}
-
 func StartServer(port string) error {
 	var indices Indices
+
+	var logging IndexesMetadata
+	logging.startIndexes()
 
 	workers := 5
 
@@ -37,12 +31,16 @@ func StartServer(port string) error {
 	}
 
 	router := httprouter.New()
-	// New implementation
 	router.POST("/api/v1/index/:idx", indices.CreateIndexHandler)
 	router.GET("/api/v1/index/:idx", indices.CheckIndexHandler)
 	router.PUT("/api/v1/index/:idx", indices.UpdateIndexStatus)
 	router.POST("/api/v1/log/:idx", indices.IngestDocHandler)
 	router.GET("/api/v1/log/:idx", indices.SearchDocHandler)
+
+	// New Implementation
+	router.POST("/api/v1/indices/:ids", CreateIndexesHandler)
+	router.POST("/api/v1/docs", logging.IngestDocsHandler)
+	router.GET("/api/v1/docs", logging.SearchDocsHandler)
 
 	log.Printf("Starting server on port %s\n", port)
 	if err := http.ListenAndServe(port, router); err != nil {
