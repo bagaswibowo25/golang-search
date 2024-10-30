@@ -21,7 +21,10 @@ func StartServer(port string) error {
 	var indices Indices
 
 	var logging IndexesMetadata
-	logging.startIndexes()
+	err := logging.startIndexes()
+	if err != nil {
+		log.Printf("No existing indices")
+	}
 
 	workers := 5
 
@@ -38,7 +41,7 @@ func StartServer(port string) error {
 	router.GET("/api/v1/log/:idx", indices.SearchDocHandler)
 
 	// New Implementation
-	router.POST("/api/v1/indices/:ids", CreateIndexesHandler)
+	router.POST("/api/v1/indices/:ids", logging.CreateIndexesHandler)
 	router.POST("/api/v1/docs", logging.IngestDocsHandler)
 	router.GET("/api/v1/docs", logging.SearchDocsHandler)
 

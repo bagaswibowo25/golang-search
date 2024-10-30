@@ -35,7 +35,7 @@ func (app *IndexesMetadata) startIndexes() error {
 
 	file, err := os.Open(metadataFile)
 	if err != nil {
-		log.Fatalf("failed to open metadata file: %v", err)
+		return err
 	}
 	defer file.Close()
 
@@ -80,14 +80,12 @@ func (app *IndexesMetadata) createNewIndexes(baseIndexName string) error {
 			return fmt.Errorf("failed to create index %s: %v", newIndexName, err)
 		}
 
-		indexes := IndexesMetadata{
-			Alias: bleve.NewIndexAlias(index),
-			Metadata: []IndexMetadata{
-				{Name: newIndexName, Open: true},
-			},
+		app.Alias = bleve.NewIndexAlias(index)
+		app.Metadata = []IndexMetadata{
+			{Name: newIndexName, Open: true},
 		}
 
-		err = saveAliasMetadata(metadataFile, indexes)
+		err = saveAliasMetadata(metadataFile, *app)
 		if err != nil {
 			return fmt.Errorf("failed to save alias metadata: %v", err)
 		}

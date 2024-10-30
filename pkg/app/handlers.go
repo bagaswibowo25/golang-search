@@ -149,15 +149,14 @@ func (ids *Indices) UpdateIndexStatus(w http.ResponseWriter, r *http.Request, ps
 	w.WriteHeader(http.StatusOK)
 }
 
-func CreateIndexesHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	var indexes IndexesMetadata
+func (logging *IndexesMetadata) CreateIndexesHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	indexesName := ps.ByName("ids")
 	if indexesName == "" {
 		log.Fatal("")
 		http.Error(w, "Invalid URL param!", http.StatusBadRequest)
 	}
 
-	indexes.createNewIndexes(indexesName)
+	logging.createNewIndexes(indexesName)
 	response := map[string]string{
 		"Status": "Created Successfully",
 	}
