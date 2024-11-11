@@ -144,13 +144,9 @@ func (n *jetStream) publishMessage(message string) {
 	}
 }
 
-func (nw *natsWorkers) subscribeMessage() {
+func (nw *natsWorkers) subscribeMessage(cb nats.MsgHandler) {
 	var data []byte
-	_, err := nw.js.js.Subscribe(nw.js.subject, func(msg *nats.Msg) {
-		data = msg.Data
-		fmt.Printf("[%s] Received message: %s\n", consumerID, string(msg.Data))
-		msg.Ack()
-	}, nats.Durable(consumerID), nats.ManualAck(), nats.SkipConsumerLookup())
+	_, err := nw.js.js.Subscribe(nw.js.subject, cb, nats.Durable(consumerID), nats.ManualAck(), nats.SkipConsumerLookup())
 
 	if err != nil {
 		log.Fatalf("Error subscribing to subject: %v", err)

@@ -2,11 +2,11 @@ package app
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/bagaswibowo25/golang-search/pkg/types"
 	"github.com/nats-io/nats.go"
@@ -54,8 +54,8 @@ func StartServer(port string) error {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go jServer.StartJS(&wg)
-	time.Sleep(5 * time.Second)
+	jServer.StartJS(&wg)
+	defer jServer.CloseJS()
 
 	workers := 5
 	lw := &loggingWorkers{
@@ -72,7 +72,12 @@ func StartServer(port string) error {
 		go nw.natsWorker(i)
 	}
 
-	nw.subscribeMessage()
+	nw.subscribeMessage(func(msg *nats.Msg) {
+		fmt.Printf("[%s] Received message: %s\n", consumerID, string(msg.Data))
+		msg.Ack()
+
+		lw.ingestLogs(msg.Data)
+	})
 
 	router := httprouter.New()
 	router.POST("/api/v1/indices/:ids", lw.indices.CreateIndexesHandler)
@@ -123,6 +128,8 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup) {
 	if err != nil {
 		log.Printf("Stream may already exist: %v", err)
 	}
+}
 
-	select {}
+func (jServer *jetStream) CloseJS() {
+	jServer.js.nc.Drain()
 }
