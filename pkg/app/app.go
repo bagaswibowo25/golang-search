@@ -6,20 +6,12 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/blevesearch/bleve"
+	"github.com/nats-io/nats.go"
 )
-
-type IndexMetadata struct {
-	Name string `json:"name"`
-	Open bool   `json:"open"`
-}
-
-type IndexesMetadata struct {
-	Alias    bleve.IndexAlias
-	Metadata []IndexMetadata `json:"metadata"`
-}
 
 func (app *IndexesMetadata) startIndexes() error {
 	var metadataFile string
@@ -109,4 +101,60 @@ func saveAliasMetadata(filename string, indexesMetadata IndexesMetadata) error {
 	}
 
 	return nil
+}
+
+func (w *loggingWorkers) loggingWorker(workerID int) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	defer wg.Done()
+
+	log.Printf("Logging worker %d started", workerID)
+	for logEntry := range w.workerChan {
+		log.Printf("Worker %d processing log: %v", workerID, logEntry)
+
+		err := logEntry.Index.Index(logEntry.ID, logEntry)
+		if err != nil {
+			log.Printf("Worker %d encountered error indexing log: %v", workerID, err)
+		}
+	}
+	log.Printf("Logging worker %d exiting", workerID)
+}
+
+func (w *natsWorkers) natsWorker(workerID int) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	defer wg.Done()
+
+	log.Printf("NATS worker %d started", workerID)
+	for logMsg := range w.natsChan {
+		log.Print(string(logMsg))
+	}
+
+	log.Printf("Logging worker %d exiting", workerID)
+}
+
+func (n *jetStream) publishMessage(message string) {
+	_, err := n.js.Publish(n.subject, []byte(message))
+	if err != nil {
+		log.Printf("Error publishing message: %v", err)
+	} else {
+		fmt.Printf("[%s] Published message: %s\n", consumerID, message)
+	}
+}
+
+func (nw *natsWorkers) subscribeMessage() {
+	var data []byte
+	_, err := nw.js.js.Subscribe(nw.js.subject, func(msg *nats.Msg) {
+		data = msg.Data
+		fmt.Printf("[%s] Received message: %s\n", consumerID, string(msg.Data))
+		msg.Ack()
+	}, nats.Durable(consumerID), nats.ManualAck(), nats.SkipConsumerLookup())
+
+	if err != nil {
+		log.Fatalf("Error subscribing to subject: %v", err)
+		return
+	}
+	nw.lw.ingestLogs(data)
 }

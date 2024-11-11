@@ -1,31 +1,23 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
+	"time"
 
 	"github.com/bagaswibowo25/golang-search/pkg/types"
-
 	"github.com/blevesearch/bleve"
 )
 
-func startIngestionWorker(workerID int) {
-	var wg sync.WaitGroup
-	wg.Add(1)
+type IndexMetadata struct {
+	Name string `json:"name"`
+	Open bool   `json:"open"`
+}
 
-	defer wg.Done()
-
-	log.Printf("Worker %d started", workerID)
-	for logEntry := range ingestionChannel {
-		log.Printf("Worker %d processing log: %v", workerID, logEntry)
-
-		err := logEntry.Index.Index(logEntry.ID, logEntry)
-		if err != nil {
-			log.Printf("Worker %d encountered error indexing log: %v", workerID, err)
-		}
-	}
-	log.Printf("Worker %d exiting", workerID)
+type IndexesMetadata struct {
+	Alias    bleve.IndexAlias
+	Metadata []IndexMetadata `json:"metadata"`
 }
 
 func searchIndexedLogs(idx bleve.Index, query string) []types.LogEntry {
@@ -64,4 +56,22 @@ func searchIndexedLogs(idx bleve.Index, query string) []types.LogEntry {
 	}
 
 	return hits
+}
+
+func (lw *loggingWorkers) ingestLogs(logsMsg []byte) {
+	var logs types.IngestRequest
+
+	err := json.Unmarshal(logsMsg, &logs)
+	if err != nil {
+		fmt.Println("Error unmarshalling JSON:", err)
+		return
+	}
+
+	for _, logEntry := range logs.Logs {
+		logEntry.Index = lw.indices.Alias
+		location, _ := time.LoadLocation("Asia/Jakarta")
+		now := time.Now().In(location)
+		logEntry.Timestamp = now.Format(time.RFC3339) + "Z"
+		lw.workerChan <- logEntry
+	}
 }
