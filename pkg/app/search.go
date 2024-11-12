@@ -59,19 +59,19 @@ func searchIndexedLogs(idx bleve.Index, query string) []types.LogEntry {
 }
 
 func (lw *loggingWorkers) ingestLogs(logsMsg []byte) {
-	var logs types.IngestRequest
-
+	var logs []types.LogEntry
 	err := json.Unmarshal(logsMsg, &logs)
 	if err != nil {
 		fmt.Println("Error unmarshalling JSON:", err)
 		return
 	}
 
-	for _, logEntry := range logs.Logs {
+	for _, logEntry := range logs {
 		logEntry.Index = lw.indices.Alias
 		location, _ := time.LoadLocation("Asia/Jakarta")
 		now := time.Now().In(location)
 		logEntry.Timestamp = now.Format(time.RFC3339) + "Z"
+
 		lw.workerChan <- logEntry
 	}
 }

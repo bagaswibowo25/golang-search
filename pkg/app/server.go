@@ -23,6 +23,7 @@ type jetStream struct {
 	subject string
 	stream  string
 	js      nats.JetStreamContext
+	nc      *nats.Conn
 }
 
 type loggingWorkers struct {
@@ -30,14 +31,8 @@ type loggingWorkers struct {
 	indices    IndexesMetadata
 }
 
-type natsWorkers struct {
-	natsChan chan []byte
-	js       jetStream
-	logMsg   []byte
-	lw       *loggingWorkers
-}
-
 func StartServer(port string) error {
+	var wg sync.WaitGroup
 	var indices IndexesMetadata
 
 	err := indices.startIndexes()
@@ -51,8 +46,6 @@ func StartServer(port string) error {
 		stream:  "loggerStream",
 	}
 
-	var wg sync.WaitGroup
-
 	wg.Add(1)
 	jServer.StartJS(&wg)
 	defer jServer.CloseJS()
@@ -62,21 +55,14 @@ func StartServer(port string) error {
 		workerChan: make(chan types.LogEntry, 100),
 		indices:    indices,
 	}
-	nw := &natsWorkers{
-		natsChan: make(chan []byte),
-		js:       jServer,
-		lw:       lw,
-	}
 	for i := 0; i < workers; i++ {
 		go lw.loggingWorker(i)
-		go nw.natsWorker(i)
 	}
 
-	nw.subscribeMessage(func(msg *nats.Msg) {
+	jServer.subscribeMessage(func(msg *nats.Msg) {
 		fmt.Printf("[%s] Received message: %s\n", consumerID, string(msg.Data))
-		msg.Ack()
-
 		lw.ingestLogs(msg.Data)
+		msg.Ack()
 	})
 
 	router := httprouter.New()
@@ -102,6 +88,7 @@ func StartHTTPServer(port string, wg *sync.WaitGroup, router *httprouter.Router)
 }
 
 func (jServer *jetStream) StartJS(wg *sync.WaitGroup) {
+	var err error
 	defer wg.Done()
 
 	flag.StringVar(&consumerID, "consumer", os.Getenv("CONSUMER_ID"), "Unique consumer ID for the server")
@@ -110,13 +97,12 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup) {
 		log.Fatal("Consumer ID must be provided as an argument or environment variable")
 	}
 
-	nc, err := nats.Connect(jServer.natsURL)
+	jServer.nc, err = nats.Connect(jServer.natsURL)
 	if err != nil {
 		log.Fatalf("Error connecting to NATS: %v", err)
 	}
-	defer nc.Drain()
 
-	jServer.js, err = nc.JetStream()
+	jServer.js, err = jServer.nc.JetStream()
 	if err != nil {
 		log.Fatalf("Error enabling JetStream: %v", err)
 	}
@@ -131,5 +117,5 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup) {
 }
 
 func (jServer *jetStream) CloseJS() {
-	jServer.js.nc.Drain()
+	jServer.nc.Drain()
 }

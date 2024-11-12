@@ -121,20 +121,6 @@ func (w *loggingWorkers) loggingWorker(workerID int) {
 	log.Printf("Logging worker %d exiting", workerID)
 }
 
-func (w *natsWorkers) natsWorker(workerID int) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	defer wg.Done()
-
-	log.Printf("NATS worker %d started", workerID)
-	for logMsg := range w.natsChan {
-		log.Print(string(logMsg))
-	}
-
-	log.Printf("Logging worker %d exiting", workerID)
-}
-
 func (n *jetStream) publishMessage(message string) {
 	_, err := n.js.Publish(n.subject, []byte(message))
 	if err != nil {
@@ -144,13 +130,11 @@ func (n *jetStream) publishMessage(message string) {
 	}
 }
 
-func (nw *natsWorkers) subscribeMessage(cb nats.MsgHandler) {
-	var data []byte
-	_, err := nw.js.js.Subscribe(nw.js.subject, cb, nats.Durable(consumerID), nats.ManualAck(), nats.SkipConsumerLookup())
+func (n *jetStream) subscribeMessage(cb nats.MsgHandler) {
+	_, err := n.js.Subscribe(n.subject, cb, nats.Durable(consumerID), nats.ManualAck(), nats.SkipConsumerLookup())
 
 	if err != nil {
 		log.Fatalf("Error subscribing to subject: %v", err)
 		return
 	}
-	nw.lw.ingestLogs(data)
 }
