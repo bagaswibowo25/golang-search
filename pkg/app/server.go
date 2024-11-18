@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -61,7 +62,13 @@ func StartServer(port string) error {
 
 	jServer.subscribeMessage(func(msg *nats.Msg) {
 		fmt.Printf("[%s] Received message: %s\n", consumerID, string(msg.Data))
-		lw.ingestLogs(msg.Data)
+		var logs []types.LogEntry
+		err := json.Unmarshal(msg.Data, &logs)
+		if err != nil {
+			fmt.Println("Error unmarshalling JSON:", err)
+			return
+		}
+		lw.ingestLogs(logs)
 		msg.Ack()
 	})
 

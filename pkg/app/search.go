@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -58,14 +57,7 @@ func searchIndexedLogs(idx bleve.Index, query string) []types.LogEntry {
 	return hits
 }
 
-func (lw *loggingWorkers) ingestLogs(logsMsg []byte) {
-	var logs []types.LogEntry
-	err := json.Unmarshal(logsMsg, &logs)
-	if err != nil {
-		fmt.Println("Error unmarshalling JSON:", err)
-		return
-	}
-
+func (lw *loggingWorkers) ingestLogs(logs []types.LogEntry) {
 	for _, logEntry := range logs {
 		logEntry.Index = lw.indices.Alias
 		location, _ := time.LoadLocation("Asia/Jakarta")
