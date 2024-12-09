@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/bagaswibowo25/golang-search/pkg/cli"
+	cli "github.com/bagaswibowo25/golang-search/pkg/cli"
 )
 
 // Config: config, terima configuration dari end users. Via CLI, via file .ini, atau env vars

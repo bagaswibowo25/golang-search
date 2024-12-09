@@ -2,11 +2,9 @@ package app
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 
 	"github.com/bagaswibowo25/golang-search/pkg/types"
@@ -32,7 +30,7 @@ type loggingWorkers struct {
 	indices    IndexesMetadata
 }
 
-func StartServer(port string) error {
+func StartServer(port string, consumerId string) error {
 	var wg sync.WaitGroup
 	var indices IndexesMetadata
 
@@ -48,7 +46,7 @@ func StartServer(port string) error {
 	}
 
 	wg.Add(1)
-	jServer.StartJS(&wg)
+	jServer.StartJS(&wg, consumerId)
 	defer jServer.CloseJS()
 
 	workers := 5
@@ -61,7 +59,7 @@ func StartServer(port string) error {
 	}
 
 	jServer.subscribeMessage(func(msg *nats.Msg) {
-		fmt.Printf("[%s] Received message: %s\n", consumerID, string(msg.Data))
+		fmt.Printf("[%s] Received message: %s\n", consumerId, string(msg.Data))
 		var logs []types.LogEntry
 		err := json.Unmarshal(msg.Data, &logs)
 		if err != nil {
@@ -94,15 +92,14 @@ func StartHTTPServer(port string, wg *sync.WaitGroup, router *httprouter.Router)
 	}
 }
 
-func (jServer *jetStream) StartJS(wg *sync.WaitGroup) {
+func (jServer *jetStream) StartJS(wg *sync.WaitGroup, consumerId string) {
 	var err error
 	defer wg.Done()
 
-	flag.StringVar(&consumerID, "consumer", os.Getenv("CONSUMER_ID"), "Unique consumer ID for the server")
-	flag.Parse()
-	if consumerID == "" {
+	if consumerId == "" {
 		log.Fatal("Consumer ID must be provided as an argument or environment variable")
 	}
+	consumerID = consumerId
 
 	jServer.nc, err = nats.Connect(jServer.natsURL)
 	if err != nil {

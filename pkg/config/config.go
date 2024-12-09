@@ -1,6 +1,6 @@
 package config
 
 type Config struct {
-	ListenPort int
-	ListenHost string
+	ListenPort string
+	ConsumerID string
 }
