@@ -131,7 +131,7 @@ func (n *jetStream) publishMessage(message string) {
 }
 
 func (n *jetStream) subscribeMessage(cb nats.MsgHandler) {
-	_, err := n.js.Subscribe(n.c.Stream, cb, nats.Durable(n.c.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
+	_, err := n.js.Subscribe(n.c.Subject, cb, nats.Durable(n.c.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
 
 	if err != nil {
 		log.Fatalf("Error subscribing to subject: %v", err)

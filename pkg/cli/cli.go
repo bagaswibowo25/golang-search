@@ -59,7 +59,7 @@ func startCmd() *cli.App {
 					}
 
 					natsConf := &config.NatsConfig{
-						ConsumerId: ":" + c.String("consumer-id"),
+						ConsumerId: c.String("consumer-id"),
 						NatsURL:    c.String("nats-url"),
 						Subject:    c.String("subject"),
 						Stream:     c.String("stream"),
