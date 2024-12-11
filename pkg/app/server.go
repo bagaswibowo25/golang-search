@@ -7,22 +7,17 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/bagaswibowo25/golang-search/pkg/config"
 	"github.com/bagaswibowo25/golang-search/pkg/types"
 	"github.com/nats-io/nats.go"
 
 	"github.com/julienschmidt/httprouter"
 )
 
-var (
-	consumerID string
-)
-
 type jetStream struct {
-	natsURL string
-	subject string
-	stream  string
-	js      nats.JetStreamContext
-	nc      *nats.Conn
+	js nats.JetStreamContext
+	nc *nats.Conn
+	c  config.NatsConfig
 }
 
 type loggingWorkers struct {
@@ -30,7 +25,7 @@ type loggingWorkers struct {
 	indices    IndexesMetadata
 }
 
-func StartServer(port string, consumerId string) error {
+func StartServer(httpConf *config.HttpConfig, natsConf *config.NatsConfig) error {
 	var wg sync.WaitGroup
 	var indices IndexesMetadata
 
@@ -40,13 +35,11 @@ func StartServer(port string, consumerId string) error {
 	}
 
 	jServer := jetStream{
-		natsURL: "http://localhost:4222",
-		subject: "loggerSubject",
-		stream:  "loggerStream",
+		c: *natsConf,
 	}
 
 	wg.Add(1)
-	jServer.StartJS(&wg, consumerId)
+	jServer.StartJS(&wg, natsConf.ConsumerId)
 	defer jServer.CloseJS()
 
 	workers := 5
@@ -59,7 +52,7 @@ func StartServer(port string, consumerId string) error {
 	}
 
 	jServer.subscribeMessage(func(msg *nats.Msg) {
-		fmt.Printf("[%s] Received message: %s\n", consumerId, string(msg.Data))
+		fmt.Printf("[%s] Received message: %s\n", natsConf.ConsumerId, string(msg.Data))
 		var logs []types.LogEntry
 		err := json.Unmarshal(msg.Data, &logs)
 		if err != nil {
@@ -76,7 +69,7 @@ func StartServer(port string, consumerId string) error {
 	router.GET("/api/v1/logs", lw.indices.SearchDocsHandler)
 
 	wg.Add(1)
-	go StartHTTPServer(port, &wg, router)
+	go StartHTTPServer(httpConf.ListenPort, &wg, router)
 
 	wg.Wait()
 
@@ -99,9 +92,8 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup, consumerId string) {
 	if consumerId == "" {
 		log.Fatal("Consumer ID must be provided as an argument or environment variable")
 	}
-	consumerID = consumerId
 
-	jServer.nc, err = nats.Connect(jServer.natsURL)
+	jServer.nc, err = nats.Connect(jServer.c.NatsURL)
 	if err != nil {
 		log.Fatalf("Error connecting to NATS: %v", err)
 	}
@@ -112,8 +104,8 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup, consumerId string) {
 	}
 
 	_, err = jServer.js.AddStream(&nats.StreamConfig{
-		Name:     jServer.stream,
-		Subjects: []string{jServer.subject},
+		Name:     jServer.c.Stream,
+		Subjects: []string{jServer.c.Subject},
 	})
 	if err != nil {
 		log.Printf("Stream may already exist: %v", err)

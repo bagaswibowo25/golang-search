@@ -122,16 +122,16 @@ func (w *loggingWorkers) loggingWorker(workerID int) {
 }
 
 func (n *jetStream) publishMessage(message string) {
-	_, err := n.js.Publish(n.subject, []byte(message))
+	_, err := n.js.Publish(n.c.Subject, []byte(message))
 	if err != nil {
 		log.Printf("Error publishing message: %v", err)
 	} else {
-		fmt.Printf("[%s] Published message: %s\n", consumerID, message)
+		fmt.Printf("[%s] Published message: %s\n", n.c.ConsumerId, message)
 	}
 }
 
 func (n *jetStream) subscribeMessage(cb nats.MsgHandler) {
-	_, err := n.js.Subscribe(n.subject, cb, nats.Durable(consumerID), nats.ManualAck(), nats.SkipConsumerLookup())
+	_, err := n.js.Subscribe(n.c.Stream, cb, nats.Durable(n.c.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
 
 	if err != nil {
 		log.Fatalf("Error subscribing to subject: %v", err)

@@ -1,6 +1,12 @@
 package config
 
-type Config struct {
+type HttpConfig struct {
 	ListenPort string
-	ConsumerID string
+}
+
+type NatsConfig struct {
+	ConsumerId string
+	NatsURL    string
+	Subject    string
+	Stream     string
 }
