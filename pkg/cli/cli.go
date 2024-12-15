@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -11,15 +10,14 @@ import (
 )
 
 func Run() {
-	cmd := startCmd()
-	if err := cmd.Run(os.Args); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	run := newSearch()
+	if err := run.Run(os.Args); err != nil {
+		log.Printf("Error running command: %s", err)
 	}
 }
 
-func startCmd() *cli.App {
-	err := &cli.App{
+func newSearch() *cli.App {
+	search := &cli.App{
 		Name:  "golang-search",
 		Usage: "CLI tool",
 		Commands: []*cli.Command{
@@ -28,10 +26,10 @@ func startCmd() *cli.App {
 				Usage: "Start golang-search server",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name:     "port",
-						Aliases:  []string{"p"},
-						Usage:    "Port to listen",
-						Required: true,
+						Name:    "port",
+						Aliases: []string{"p"},
+						Usage:   "Port to listen",
+						Value:   "8080",
 					},
 					&cli.StringFlag{
 						Name:     "consumer-id",
@@ -43,14 +41,17 @@ func startCmd() *cli.App {
 						Name:    "nats-url",
 						Aliases: []string{"ns"},
 						Usage:   "Nats URL",
+						Value:   "https://localhost:4222",
 					},
 					&cli.StringFlag{
-						Name:  "subject",
-						Usage: "Nats URL",
+						Name:     "subject",
+						Usage:    "NATS Subject",
+						Required: true,
 					},
 					&cli.StringFlag{
-						Name:  "stream",
-						Usage: "Nats URL",
+						Name:     "stream",
+						Usage:    "NATS Stream",
+						Required: true,
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -65,28 +66,15 @@ func startCmd() *cli.App {
 						Stream:     c.String("stream"),
 					}
 
-					if natsConf.NatsURL == "" {
-						natsConf.NatsURL = "http://localhost:4222"
+					err := app.StartServer(httpConf, natsConf)
+					if err != nil {
+						log.Printf("cant start golang-search %s", err)
 					}
 
-					if natsConf.Subject == "" {
-						natsConf.Subject = "loggerSubject"
-					}
-
-					if natsConf.Stream == "" {
-						natsConf.Stream = "loggerStream"
-					}
-
-					start := app.StartServer(httpConf, natsConf)
-
-					if start != nil {
-						log.Fatalf("cant start golang-search %s", start)
-					}
-
-					return nil
+					return err
 				},
 			},
 		},
 	}
-	return err
+	return search
 }

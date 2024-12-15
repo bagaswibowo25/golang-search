@@ -121,17 +121,17 @@ func (w *loggingWorkers) loggingWorker(workerID int) {
 	log.Printf("Logging worker %d exiting", workerID)
 }
 
-func (n *jetStream) publishMessage(message string) {
-	_, err := n.js.Publish(n.c.Subject, []byte(message))
+func (js *jetStream) publishMessage(message string) {
+	_, err := js.streamCtx.Publish(js.conf.Subject, []byte(message))
 	if err != nil {
 		log.Printf("Error publishing message: %v", err)
 	} else {
-		fmt.Printf("[%s] Published message: %s\n", n.c.ConsumerId, message)
+		fmt.Printf("[%s] Published message: %s\n", js.conf.ConsumerId, message)
 	}
 }
 
-func (n *jetStream) subscribeMessage(cb nats.MsgHandler) {
-	_, err := n.js.Subscribe(n.c.Subject, cb, nats.Durable(n.c.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
+func (js *jetStream) subscribeMessage(cb nats.MsgHandler) {
+	_, err := js.streamCtx.Subscribe(js.conf.Subject, cb, nats.Durable(js.conf.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
 
 	if err != nil {
 		log.Fatalf("Error subscribing to subject: %v", err)

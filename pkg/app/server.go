@@ -15,9 +15,9 @@ import (
 )
 
 type jetStream struct {
-	js nats.JetStreamContext
-	nc *nats.Conn
-	c  config.NatsConfig
+	streamCtx nats.JetStreamContext
+	conn      *nats.Conn
+	conf      config.NatsConfig
 }
 
 type loggingWorkers struct {
@@ -35,7 +35,7 @@ func StartServer(httpConf *config.HttpConfig, natsConf *config.NatsConfig) error
 	}
 
 	jServer := jetStream{
-		c: *natsConf,
+		conf: *natsConf,
 	}
 
 	wg.Add(1)
@@ -73,7 +73,7 @@ func StartServer(httpConf *config.HttpConfig, natsConf *config.NatsConfig) error
 
 	wg.Wait()
 
-	return nil
+	return err
 }
 
 func StartHTTPServer(port string, wg *sync.WaitGroup, router *httprouter.Router) {
@@ -93,19 +93,19 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup, consumerId string) {
 		log.Fatal("Consumer ID must be provided as an argument or environment variable")
 	}
 
-	jServer.nc, err = nats.Connect(jServer.c.NatsURL)
+	jServer.conn, err = nats.Connect(jServer.conf.NatsURL)
 	if err != nil {
 		log.Fatalf("Error connecting to NATS: %v", err)
 	}
 
-	jServer.js, err = jServer.nc.JetStream()
+	jServer.streamCtx, err = jServer.conn.JetStream()
 	if err != nil {
 		log.Fatalf("Error enabling JetStream: %v", err)
 	}
 
-	_, err = jServer.js.AddStream(&nats.StreamConfig{
-		Name:     jServer.c.Stream,
-		Subjects: []string{jServer.c.Subject},
+	_, err = jServer.streamCtx.AddStream(&nats.StreamConfig{
+		Name:     jServer.conf.Stream,
+		Subjects: []string{jServer.conf.Subject},
 	})
 	if err != nil {
 		log.Printf("Stream may already exist: %v", err)
@@ -113,5 +113,5 @@ func (jServer *jetStream) StartJS(wg *sync.WaitGroup, consumerId string) {
 }
 
 func (jServer *jetStream) CloseJS() {
-	jServer.nc.Drain()
+	jServer.conn.Drain()
 }
