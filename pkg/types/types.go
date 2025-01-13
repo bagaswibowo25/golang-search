@@ -22,3 +22,15 @@ type Index struct {
 	Active bool
 	Name   string
 }
+
+
+
+type IndexMetadata struct {
+	Name string `json:"name"`
+	Open bool   `json:"open"`
+}
+
+type IndexesMetadata struct {
+	Alias    bleve.IndexAlias
+	Metadata []IndexMetadata `json:"metadata"`
+}

@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/bagaswibowo25/golang-search/pkg/app"
 	"github.com/bagaswibowo25/golang-search/pkg/config"
+	"github.com/bagaswibowo25/golang-search/pkg/server"
 	cli "github.com/urfave/cli/v2"
 )
 
@@ -66,7 +66,7 @@ func newSearch() *cli.App {
 						Stream:     c.String("stream"),
 					}
 
-					err := app.StartServer(httpConf, natsConf)
+					err := server.StartServer(httpConf, natsConf)
 					if err != nil {
 						log.Printf("cant start golang-search %s", err)
 					}

@@ -3,62 +3,18 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"sync"
 	"time"
 
+	"github.com/bagaswibowo25/golang-search/pkg/pubsub"
+	"github.com/bagaswibowo25/golang-search/pkg/types"
 	"github.com/blevesearch/bleve"
-	"github.com/nats-io/nats.go"
 )
 
-func (app *IndexesMetadata) startIndexes() error {
-	var metadataFile string
-
-	files, err := os.ReadDir("metadata")
-	if err != nil {
-		log.Fatalf("Error reading directory: %v", err)
-	}
-
-	for _, file := range files {
-		metadataFile = fmt.Sprintf("metadata/%s", file.Name())
-	}
-
-	file, err := os.Open(metadataFile)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	byteValue, err := io.ReadAll(file)
-	if err != nil {
-		log.Fatalf("failed to read metadata file: %v", err)
-	}
-	fmt.Println(string(byteValue))
-
-	err = json.Unmarshal(byteValue, &app)
-	if err != nil {
-		log.Fatalf("failed to parse metadata file: %v", err)
-	}
-
-	alias := bleve.NewIndexAlias()
-
-	for _, indexInfo := range app.Metadata {
-		if indexInfo.Open {
-			index, err := bleve.Open(indexInfo.Name)
-			if err != nil {
-				log.Printf("Failed to open index %s: %v", indexInfo.Name, err)
-				continue
-			}
-			alias.Add(index)
-		} else {
-			fmt.Printf("Skipping closed index: %s\n", indexInfo.Name)
-		}
-	}
-	app.Alias = alias
-
-	return nil
+type IndexesMetadata struct {
+	types.IndexesMetadata
+	JServer *pubsub.JetStream
 }
 
 func (app *IndexesMetadata) createNewIndexes(baseIndexName string) error {
@@ -73,7 +29,7 @@ func (app *IndexesMetadata) createNewIndexes(baseIndexName string) error {
 		}
 
 		app.Alias = bleve.NewIndexAlias(index)
-		app.Metadata = []IndexMetadata{
+		app.Metadata = []types.IndexMetadata{
 			{Name: newIndexName, Open: true},
 		}
 
@@ -90,7 +46,7 @@ func (app *IndexesMetadata) createNewIndexes(baseIndexName string) error {
 }
 
 func saveAliasMetadata(filename string, indexesMetadata IndexesMetadata) error {
-	jsonData, err := json.Marshal(map[string][]IndexMetadata{"metadata": indexesMetadata.Metadata})
+	jsonData, err := json.Marshal(map[string][]types.IndexMetadata{"metadata": indexesMetadata.Metadata})
 	if err != nil {
 		return fmt.Errorf("failed to serialize metadata to JSON: %v", err)
 	}
@@ -103,38 +59,40 @@ func saveAliasMetadata(filename string, indexesMetadata IndexesMetadata) error {
 	return nil
 }
 
-func (w *loggingWorkers) loggingWorker(workerID int) {
-	var wg sync.WaitGroup
-	wg.Add(1)
+func searchIndexedLogs(idx bleve.Index, query string) []types.LogEntry {
+	var hits []types.LogEntry
 
-	defer wg.Done()
+	search := bleve.NewMatchQuery(query)
+	searchRequest := bleve.NewSearchRequest(search)
 
-	log.Printf("Logging worker %d started", workerID)
-	for logEntry := range w.workerChan {
-		log.Printf("Worker %d processing log: %v", workerID, logEntry)
+	searchResult, err := idx.Search(searchRequest)
+	if err != nil {
+		log.Printf("Error during search: %v", err)
+		fmt.Println(hits)
+		return hits
+	}
 
-		err := logEntry.Index.Index(logEntry.ID, logEntry)
+	for _, hit := range searchResult.Hits {
+		doc, err := idx.Document(hit.ID)
 		if err != nil {
-			log.Printf("Worker %d encountered error indexing log: %v", workerID, err)
+			log.Printf("Error retrieving document for ID %s: %v", hit.ID, err)
+			continue
 		}
-	}
-	log.Printf("Logging worker %d exiting", workerID)
-}
 
-func (js *jetStream) publishMessage(message string) {
-	_, err := js.streamCtx.Publish(js.conf.Subject, []byte(message))
-	if err != nil {
-		log.Printf("Error publishing message: %v", err)
-	} else {
-		fmt.Printf("[%s] Published message: %s\n", js.conf.ConsumerId, message)
-	}
-}
+		var logEntry types.LogEntry
+		for _, field := range doc.Fields {
+			switch field.Name() {
+			case "id":
+				logEntry.ID = string(field.Value())
+			case "timestamp":
+				logEntry.Timestamp = string(field.Value())
+			case "message":
+				logEntry.Message = string(field.Value())
+			}
+		}
 
-func (js *jetStream) subscribeMessage(cb nats.MsgHandler) {
-	_, err := js.streamCtx.Subscribe(js.conf.Subject, cb, nats.Durable(js.conf.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
-
-	if err != nil {
-		log.Fatalf("Error subscribing to subject: %v", err)
-		return
+		hits = append(hits, logEntry)
 	}
+
+	return hits
 }

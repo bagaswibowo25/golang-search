@@ -5,9 +5,12 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/bagaswibowo25/golang-search/pkg/pubsub"
 	"github.com/bagaswibowo25/golang-search/pkg/types"
 	"github.com/julienschmidt/httprouter"
 )
+
+type JetStream pubsub.JetStream
 
 func (ids *IndexesMetadata) CreateIndexesHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	indexesName := ps.ByName("ids")
@@ -25,7 +28,7 @@ func (ids *IndexesMetadata) CreateIndexesHandler(w http.ResponseWriter, r *http.
 	json.NewEncoder(w).Encode(response)
 }
 
-func (js *jetStream) publishLogsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (ids *IndexesMetadata) PublishLogsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var logs types.IngestRequest
 
 	err := json.NewDecoder(r.Body).Decode(&logs)
@@ -38,7 +41,7 @@ func (js *jetStream) publishLogsHandler(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		log.Printf("Invalid JSON format for logs!")
 	}
-	js.publishMessage(string(logData))
+	pubsub.PublishMessage(string(logData), ids.JServer)
 
 	response := map[string]string{
 		"Status": "Success to publish logs",
