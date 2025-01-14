@@ -41,7 +41,7 @@ func (ids *IndexesMetadata) PublishLogsHandler(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		log.Printf("Invalid JSON format for logs!")
 	}
-	pubsub.PublishMessage(string(logData), ids.JServer)
+	ids.JServer.PublishMessage(string(logData))
 
 	response := map[string]string{
 		"Status": "Success to publish logs",

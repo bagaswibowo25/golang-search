@@ -23,8 +23,6 @@ type Index struct {
 	Name   string
 }
 
-
-
 type IndexMetadata struct {
 	Name string `json:"name"`
 	Open bool   `json:"open"`

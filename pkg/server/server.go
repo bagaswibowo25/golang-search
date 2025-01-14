@@ -16,18 +16,25 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-func StartServer(httpConf *config.HttpConfig, natsConf *config.NatsConfig) error {
+type ServerConfig struct {
+	HttpConf *config.HttpConfig
+	NatsConf *config.NatsConfig
+	wg       sync.WaitGroup
+	jServer  *pubsub.JetStream
+}
+
+func (srv *ServerConfig) StartServer() error {
 	var wg sync.WaitGroup
 	var indices app.IndexesMetadata
 
-	jServer := &pubsub.JetStream{
-		Conf: *natsConf,
+	srv.jServer = &pubsub.JetStream{
+		Conf: *srv.NatsConf,
 	}
 
-	wg.Add(1)
-	startJS(&wg, natsConf.ConsumerId, jServer)
-	defer closeJS(jServer)
-	indices.JServer = jServer
+	srv.wg.Add(1)
+	srv.startJS()
+	defer closeJS(srv.jServer)
+	indices.JServer = srv.jServer
 
 	workers := 5
 	lw := &loggingWorkers{
@@ -43,8 +50,8 @@ func StartServer(httpConf *config.HttpConfig, natsConf *config.NatsConfig) error
 		log.Printf("No existing indices found! Please create new index")
 	}
 
-	pubsub.SubscribeMessage(func(msg *nats.Msg) {
-		fmt.Printf("[%s] Received message: %s\n", natsConf.ConsumerId, string(msg.Data))
+	srv.jServer.SubscribeMessage(func(msg *nats.Msg) {
+		fmt.Printf("[%s] Received message: %s\n", srv.NatsConf.ConsumerId, string(msg.Data))
 		var logs []types.LogEntry
 		err := json.Unmarshal(msg.Data, &logs)
 		if err != nil {
@@ -53,51 +60,51 @@ func StartServer(httpConf *config.HttpConfig, natsConf *config.NatsConfig) error
 		}
 		lw.ingestLogs(logs)
 		msg.Ack()
-	}, jServer)
+	})
 
-	router := httprouter.New()
-	router.POST("/api/v1/indices/:ids", lw.Indices.CreateIndexesHandler)
-	router.POST("/api/v1/logs", lw.Indices.PublishLogsHandler)
-	router.GET("/api/v1/logs", lw.Indices.SearchDocsHandler)
+	srv.HttpConf.Router = httprouter.New()
+	srv.HttpConf.Router.POST("/api/v1/indices/:ids", lw.Indices.CreateIndexesHandler)
+	srv.HttpConf.Router.POST("/api/v1/logs", lw.Indices.PublishLogsHandler)
+	srv.HttpConf.Router.GET("/api/v1/logs", lw.Indices.SearchDocsHandler)
 
-	wg.Add(1)
-	go StartHTTPServer(httpConf.ListenPort, &wg, router)
+	srv.wg.Add(1)
+	go srv.startHTTPServer()
 
 	wg.Wait()
 
 	return err
 }
 
-func StartHTTPServer(port string, wg *sync.WaitGroup, router *httprouter.Router) {
-	defer wg.Done()
+func (srv *ServerConfig) startHTTPServer() {
+	defer srv.wg.Done()
 
-	log.Printf("Starting HTTP server on port %s\n", port)
-	if err := http.ListenAndServe(port, router); err != nil {
+	log.Printf("Starting HTTP server on port %s\n", srv.HttpConf.ListenPort)
+	if err := http.ListenAndServe(srv.HttpConf.ListenPort, srv.HttpConf.Router); err != nil {
 		log.Fatalf("Error starting HTTP server: %v", err)
 	}
 }
 
-func startJS(wg *sync.WaitGroup, consumerId string, jServer *pubsub.JetStream) {
+func (srv *ServerConfig) startJS() {
 	var err error
-	defer wg.Done()
+	defer srv.wg.Done()
 
-	if consumerId == "" {
+	if srv.NatsConf.ConsumerId == "" {
 		log.Fatal("Consumer ID must be provided as an argument or environment variable")
 	}
 
-	jServer.Conn, err = nats.Connect(jServer.Conf.NatsURL)
+	srv.jServer.Conn, err = nats.Connect(srv.jServer.Conf.NatsURL)
 	if err != nil {
 		log.Fatalf("Error connecting to NATS: %v", err)
 	}
 
-	jServer.StreamCtx, err = jServer.Conn.JetStream()
+	srv.jServer.StreamCtx, err = srv.jServer.Conn.JetStream()
 	if err != nil {
 		log.Fatalf("Error enabling JetStream: %v", err)
 	}
 
-	_, err = jServer.StreamCtx.AddStream(&nats.StreamConfig{
-		Name:     jServer.Conf.Stream,
-		Subjects: []string{jServer.Conf.Subject},
+	_, err = srv.jServer.StreamCtx.AddStream(&nats.StreamConfig{
+		Name:     srv.jServer.Conf.Stream,
+		Subjects: []string{srv.jServer.Conf.Subject},
 	})
 	if err != nil {
 		log.Printf("Stream may already exist: %v", err)

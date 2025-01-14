@@ -19,14 +19,14 @@ type loggingWorkers struct {
 	Indices    app.IndexesMetadata
 }
 
-func (w *loggingWorkers) startLoggingWorker(workerID int) {
+func (lw *loggingWorkers) startLoggingWorker(workerID int) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	defer wg.Done()
 
 	log.Printf("Logging worker %d started", workerID)
-	for logEntry := range w.WorkerChan {
+	for logEntry := range lw.WorkerChan {
 		log.Printf("Worker %d processing log: %v", workerID, logEntry)
 
 		err := logEntry.Index.Index(logEntry.ID, logEntry)

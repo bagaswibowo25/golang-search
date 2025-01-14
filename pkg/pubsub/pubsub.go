@@ -14,7 +14,7 @@ type JetStream struct {
 	Conf      config.NatsConfig
 }
 
-func PublishMessage(message string, jServer *JetStream) {
+func (jServer *JetStream) PublishMessage(message string) {
 	_, err := jServer.StreamCtx.Publish(jServer.Conf.Subject, []byte(message))
 	if err != nil {
 		log.Printf("Error publishing message: %v", err)
@@ -23,7 +23,7 @@ func PublishMessage(message string, jServer *JetStream) {
 	}
 }
 
-func SubscribeMessage(cb nats.MsgHandler, jServer *JetStream) {
+func (jServer *JetStream) SubscribeMessage(cb nats.MsgHandler) {
 	_, err := jServer.StreamCtx.Subscribe(jServer.Conf.Subject, cb, nats.Durable(jServer.Conf.ConsumerId), nats.ManualAck(), nats.SkipConsumerLookup())
 
 	if err != nil {
