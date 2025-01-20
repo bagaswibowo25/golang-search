@@ -66,12 +66,12 @@ func newSearch() *cli.App {
 						Stream:     c.String("stream"),
 					}
 
-					srvConf := &server.ServerConfig{
+					srv := &server.Server{
 						HttpConf: httpConf,
 						NatsConf: natsConf,
 					}
 
-					err := srvConf.StartServer()
+					err := srv.StartServer()
 					if err != nil {
 						log.Printf("cant start golang-search %s", err)
 					}

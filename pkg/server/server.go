@@ -16,14 +16,15 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-type ServerConfig struct {
+type Server struct {
 	HttpConf *config.HttpConfig
 	NatsConf *config.NatsConfig
-	wg       sync.WaitGroup
+	Router   *httprouter.Router
 	jServer  *pubsub.JetStream
+	wg       sync.WaitGroup
 }
 
-func (srv *ServerConfig) StartServer() error {
+func (srv *Server) StartServer() error {
 	var wg sync.WaitGroup
 	var indices app.IndexesMetadata
 
@@ -62,10 +63,10 @@ func (srv *ServerConfig) StartServer() error {
 		msg.Ack()
 	})
 
-	srv.HttpConf.Router = httprouter.New()
-	srv.HttpConf.Router.POST("/api/v1/indices/:ids", lw.Indices.CreateIndexesHandler)
-	srv.HttpConf.Router.POST("/api/v1/logs", lw.Indices.PublishLogsHandler)
-	srv.HttpConf.Router.GET("/api/v1/logs", lw.Indices.SearchDocsHandler)
+	srv.Router = httprouter.New()
+	srv.Router.POST("/api/v1/indices/:ids", lw.Indices.CreateIndexesHandler)
+	srv.Router.POST("/api/v1/logs", lw.Indices.PublishLogsHandler)
+	srv.Router.GET("/api/v1/logs", lw.Indices.SearchDocsHandler)
 
 	srv.wg.Add(1)
 	go srv.startHTTPServer()
@@ -75,16 +76,16 @@ func (srv *ServerConfig) StartServer() error {
 	return err
 }
 
-func (srv *ServerConfig) startHTTPServer() {
+func (srv *Server) startHTTPServer() {
 	defer srv.wg.Done()
 
 	log.Printf("Starting HTTP server on port %s\n", srv.HttpConf.ListenPort)
-	if err := http.ListenAndServe(srv.HttpConf.ListenPort, srv.HttpConf.Router); err != nil {
+	if err := http.ListenAndServe(srv.HttpConf.ListenPort, srv.Router); err != nil {
 		log.Fatalf("Error starting HTTP server: %v", err)
 	}
 }
 
-func (srv *ServerConfig) startJS() {
+func (srv *Server) startJS() {
 	var err error
 	defer srv.wg.Done()
 
